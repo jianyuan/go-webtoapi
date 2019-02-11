@@ -39,64 +39,19 @@ func newSelectorField(fn func(*goquery.Selection) (interface{}, error)) *graphql
 	}
 }
 
-var NodeType = graphql.NewInterface(graphql.InterfaceConfig{
-	Name: "Node",
-	Fields: graphql.Fields{
-		"content": &graphql.Field{
-			Type: graphql.String,
-			Args: graphql.FieldConfigArgument{
-				"selector": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-			},
-		},
-		"html": &graphql.Field{
-			Type: graphql.String,
-			Args: graphql.FieldConfigArgument{
-				"selector": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-			},
-		},
-		"text": &graphql.Field{
-			Type: graphql.String,
-			Args: graphql.FieldConfigArgument{
-				"selector": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-			},
-		},
-		"tag": &graphql.Field{
-			Type: graphql.String,
-			Args: graphql.FieldConfigArgument{
-				"selector": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-			},
-		},
-		"attr": &graphql.Field{
-			Type: graphql.String,
-			Args: graphql.FieldConfigArgument{
-				"selector": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"name": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
-				},
-			},
-		},
-	},
-})
+var NodeType *graphql.Interface
+var ElementType *graphql.Object
+var DocumentType *graphql.Object
 
 func addNodeFieldConfigs(gt *graphql.Object) {
 	gt.AddFieldConfig("content", newSelectorField(func(selection *goquery.Selection) (interface{}, error) {
-		return selection.Html()
+		return selection.First().Html()
 	}))
 	gt.AddFieldConfig("html", newSelectorField(func(selection *goquery.Selection) (interface{}, error) {
 		return goquery.OuterHtml(selection)
 	}))
 	gt.AddFieldConfig("text", newSelectorField(func(selection *goquery.Selection) (interface{}, error) {
-		return selection.Text(), nil
+		return selection.First().Text(), nil
 	}))
 	gt.AddFieldConfig("tag", newSelectorField(func(selection *goquery.Selection) (interface{}, error) {
 		return goquery.NodeName(selection), nil
@@ -125,38 +80,169 @@ func addNodeFieldConfigs(gt *graphql.Object) {
 			return nil, nil
 		},
 	})
-}
-
-var DocumentType = graphql.NewObject(graphql.ObjectConfig{
-	Name: "Document",
-	Interfaces: []*graphql.Interface{
-		NodeType,
-	},
-	Fields: graphql.Fields{
-		"title": &graphql.Field{
-			Type: graphql.String,
-			Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-				selection, ok := p.Source.(*goquery.Selection)
-				if ok {
-					return selection.Find("title").Text(), nil
-				}
-				return nil, nil
+	gt.AddFieldConfig("query", &graphql.Field{
+		Type: graphql.NewList(ElementType),
+		Args: graphql.FieldConfigArgument{
+			"selector": &graphql.ArgumentConfig{
+				Type: graphql.NewNonNull(graphql.String),
 			},
 		},
-	},
-})
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			selection, ok := selectionFromResolveParams(p)
+			if ok {
+				var items []interface{}
+				selection.Each(func(_ int, item *goquery.Selection) {
+					items = append(items, item)
+				})
+				return items, nil
+			}
+			return nil, nil
+		},
+	})
+	gt.AddFieldConfig("next", &graphql.Field{
+		Type: ElementType,
+		Args: graphql.FieldConfigArgument{
+			"selector": &graphql.ArgumentConfig{
+				Type: graphql.String,
+			},
+		},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			selection, ok := selectionFromResolveParams(p)
+			if ok {
+				return selection.Next(), nil
+			}
+			return nil, nil
+		},
+	})
+	gt.AddFieldConfig("nextAll", &graphql.Field{
+		Type: graphql.NewList(ElementType),
+		Args: graphql.FieldConfigArgument{
+			"selector": &graphql.ArgumentConfig{
+				Type: graphql.String,
+			},
+		},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			selection, ok := selectionFromResolveParams(p)
+			if ok {
+				var items []interface{}
+				selection.NextAll().Each(func(_ int, item *goquery.Selection) {
+					items = append(items, item)
+				})
+				return items, nil
+			}
+			return nil, nil
+		},
+	})
+}
 
-var ElementType = graphql.NewObject(graphql.ObjectConfig{
-	Name: "Element",
-	Interfaces: []*graphql.Interface{
-		NodeType,
-	},
-	Fields: graphql.Fields{},
-})
+func init() {
+	NodeType = graphql.NewInterface(graphql.InterfaceConfig{
+		Name: "Node",
+		Fields: graphql.FieldsThunk(func() graphql.Fields {
+			return graphql.Fields{
+				"content": &graphql.Field{
+					Type: graphql.String,
+					Args: graphql.FieldConfigArgument{
+						"selector": &graphql.ArgumentConfig{
+							Type: graphql.String,
+						},
+					},
+				},
+				"html": &graphql.Field{
+					Type: graphql.String,
+					Args: graphql.FieldConfigArgument{
+						"selector": &graphql.ArgumentConfig{
+							Type: graphql.String,
+						},
+					},
+				},
+				"text": &graphql.Field{
+					Type: graphql.String,
+					Args: graphql.FieldConfigArgument{
+						"selector": &graphql.ArgumentConfig{
+							Type: graphql.String,
+						},
+					},
+				},
+				"tag": &graphql.Field{
+					Type: graphql.String,
+					Args: graphql.FieldConfigArgument{
+						"selector": &graphql.ArgumentConfig{
+							Type: graphql.String,
+						},
+					},
+				},
+				"attr": &graphql.Field{
+					Type: graphql.String,
+					Args: graphql.FieldConfigArgument{
+						"selector": &graphql.ArgumentConfig{
+							Type: graphql.String,
+						},
+						"name": &graphql.ArgumentConfig{
+							Type: graphql.NewNonNull(graphql.String),
+						},
+					},
+				},
+				"query": &graphql.Field{
+					Type: graphql.NewList(ElementType),
+					Args: graphql.FieldConfigArgument{
+						"selector": &graphql.ArgumentConfig{
+							Type: graphql.NewNonNull(graphql.String),
+						},
+					},
+				},
+				"next": &graphql.Field{
+					Type: ElementType,
+					Args: graphql.FieldConfigArgument{
+						"selector": &graphql.ArgumentConfig{
+							Type: graphql.String,
+						},
+					},
+				},
+				"nextAll": &graphql.Field{
+					Type: graphql.NewList(ElementType),
+					Args: graphql.FieldConfigArgument{
+						"selector": &graphql.ArgumentConfig{
+							Type: graphql.String,
+						},
+					},
+				},
+			}
+		}),
+	})
+
+	DocumentType = graphql.NewObject(graphql.ObjectConfig{
+		Name: "Document",
+		Interfaces: []*graphql.Interface{
+			NodeType,
+		},
+		Fields: graphql.Fields{
+			"title": &graphql.Field{
+				Type: graphql.String,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					selection, ok := p.Source.(*goquery.Selection)
+					if ok {
+						return selection.Find("title").Text(), nil
+					}
+					return nil, nil
+				},
+			},
+		},
+	})
+
+	ElementType = graphql.NewObject(graphql.ObjectConfig{
+		Name: "Element",
+		Interfaces: []*graphql.Interface{
+			NodeType,
+		},
+		Fields: graphql.Fields{},
+	})
+
+	addNodeFieldConfigs(DocumentType)
+	addNodeFieldConfigs(ElementType)
+}
 
 func main() {
-	addNodeFieldConfigs(DocumentType)
-
 	fields := graphql.Fields{
 		"page": &graphql.Field{
 			Type: DocumentType,
